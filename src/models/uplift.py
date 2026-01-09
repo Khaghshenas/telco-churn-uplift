@@ -5,7 +5,7 @@ import joblib
 
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
-
+from sklift.metrics import uplift_at_k, qini_auc_score
 
 PROCESSED_DIR = "data/processed"
 MODEL_DIR = "models"
@@ -61,6 +61,32 @@ def predict_uplift(model_t, model_c, X_test):
     uplift = prob_t - prob_c
     return uplift, prob_t, prob_c
 
+def evaluate_uplift(y_true, uplift_scores, treatment, top_k=0.2):
+    """
+    Evaluate uplift model performance.
+
+    Parameters
+    ----------
+    y_true : array-like
+        True outcome labels (0/1)
+    uplift_scores : array-like
+        Predicted uplift scores
+    treatment : array-like
+        Treatment assignment (0=control, 1=treated)
+    top_k : float
+        Fraction of top scored customers to compute uplift@k
+
+    Returns
+    -------
+    dict
+        Metrics: 'uplift_at_k' and 'qini_auc'
+    """
+    metrics = {}
+    metrics["uplift_at_{}_pct".format(int(top_k*100))] = uplift_at_k(
+        y_true, uplift_scores, treatment, strategy="by_group", k=top_k
+    )
+    metrics["qini_auc"] = qini_auc_score(y_true, uplift_scores, treatment)
+    return metrics
 
 def run_uplift_pipeline():
     """Load processed data, generate synthetic treatment, train models, compute uplift."""
@@ -82,4 +108,10 @@ def run_uplift_pipeline():
     print("\nSample uplift scores:")
     print(uplift[:10])
 
-    return uplift, p_t, p_c
+    # Step 4: Evaluate uplift
+    metrics = evaluate_uplift(y_test, uplift, treat_test)
+    print("\nUplift Evaluation Metrics:")
+    for k, v in metrics.items():
+        print(f"{k}: {v:.4f}")
+
+    return uplift, p_t, p_c, metrics
